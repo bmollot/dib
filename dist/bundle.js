@@ -8797,6 +8797,7 @@ const joinThread = threadId => {
     currentThread = new Thread(threadId)
     currentThread.onNewPeer = (peer, id) => {
         console.log("New peer", id)
+        peer.send(JSON.stringify(currentThread.posts))
         updatePeerDisplay()
     }
     currentThread.onLostPeer = (peer, id) => {
@@ -8809,7 +8810,7 @@ const joinThread = threadId => {
         dd.apply(prevThreadElem, diff)
         prevThreadElem = document.getElementById('thread-container').children[0]
     }
-
+    updatePeerDisplay()
     document.getElementById('thread-id-display').textContent = currentThread.id
 }
 
@@ -8850,6 +8851,16 @@ document.body.onload = () => {
 }
 },{"./thread.js":52,"diff-dom":5}],51:[function(require,module,exports){
 
+String.prototype.hashCode = function(){
+  var hash = 0;
+  for (var i = 0; i < this.length; i++) {
+      var character = this.charCodeAt(i);
+      hash = ((hash<<5)-hash)+character;
+      hash = hash & hash; // Convert to 32bit integer
+  }
+  return hash;
+}
+
 function uuidv4() {
   return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
     (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
@@ -8859,15 +8870,15 @@ function uuidv4() {
 module.exports = class Post {
   constructor(msg) {
     if (typeof msg === 'string' || msg instanceof String) { // Message text
-      this.id = uuidv4()
       this.text = msg
       this.timestamp = Date.now()
     } else { // An object with all properties
       const o = msg
-      this.id = o.id
+      //this.id = o.id
       this.text = o.text
       this.timestamp = o.timestamp
     }
+    this.id = (this.text + this.timestamp).hashCode()
   }
 
   asElement() {
@@ -8884,6 +8895,10 @@ module.exports = class Post {
     post.id = 'post-' + this.id
     post.classList.add('post')
     return post
+  }
+
+  equals(other) {
+    return this.id == other.id
   }
 }
 },{}],52:[function(require,module,exports){
@@ -8908,8 +8923,10 @@ module.exports = class Thread {
       peer.on('data', rawData => {
         console.log("Got data", id, rawData, rawData.toString())
         const data = JSON.parse(rawData.toString())
-        if (data.type && data.type === 'post') {
+        if (data.type && data.type === 'post') { // new post
           this.addPost(new Post(data.contents))
+        } else { // history dump
+          this.merge(data)
         }
       })
       if (this.onNewPeer) this.onNewPeer(peer, id)
@@ -8939,23 +8956,43 @@ module.exports = class Thread {
   }
 
   addPost(newPost) {
+    let added = false
     // first post
     if (this.posts.length === 0) {
       this.posts.push(newPost)
+      added = true
     } else {
-      const time = newPost.timestamp
-      let added = false
-      for (let cur = 0; cur < this.posts.length - 1; cur++) {
-        if (this.posts[cur].timestamp < time && time < this.posts[cur + 1].timestamp) {
-          this.posts.splice(cur, 0, newPost)
+      // Check for uniqueness
+      if (this.posts.every(p => !p.equals(newPost))) {
+        const time = newPost.timestamp
+        
+        for (let cur = 0; cur < this.posts.length - 1; cur++) {
+          if (this.posts[cur].timestamp < time && time < this.posts[cur + 1].timestamp) {
+            this.posts.splice(cur, 0, newPost)
+            added = true
+          }
+        }
+        if (!added) {
+          this.posts.push(newPost)
           added = true
         }
       }
-      if (!added) {
-        this.posts.push(newPost)
-      }
     }
-    if (this.onPostsChanged) this.onPostsChanged(newPost)
+    if (added && this.onPostsChanged) this.onPostsChanged(newPost)
+  }
+
+  merge(posts) {
+    if (posts.length === 0) return
+
+    this.posts = this.posts.concat(posts).reduce((a,c) => {
+      if (!(c instanceof Post)) c = new Post(c)
+      if (a.every(p => !p.equals(c))) {
+        a.push(c)
+      }
+      return a
+    }, []).sort((a,b) => a.timestamp - b.timestamp)
+
+    if (this.onPostsChanged) this.onPostsChanged(posts)
   }
 
   asElement() {

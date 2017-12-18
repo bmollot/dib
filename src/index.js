@@ -22,6 +22,7 @@ const joinThread = threadId => {
     currentThread = new Thread(threadId)
     currentThread.onNewPeer = (peer, id) => {
         console.log("New peer", id)
+        peer.send(JSON.stringify(currentThread.posts))
         updatePeerDisplay()
     }
     currentThread.onLostPeer = (peer, id) => {
@@ -34,7 +35,7 @@ const joinThread = threadId => {
         dd.apply(prevThreadElem, diff)
         prevThreadElem = document.getElementById('thread-container').children[0]
     }
-
+    updatePeerDisplay()
     document.getElementById('thread-id-display').textContent = currentThread.id
 }
 

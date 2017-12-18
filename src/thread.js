@@ -19,8 +19,10 @@ module.exports = class Thread {
       peer.on('data', rawData => {
         console.log("Got data", id, rawData, rawData.toString())
         const data = JSON.parse(rawData.toString())
-        if (data.type && data.type === 'post') {
+        if (data.type && data.type === 'post') { // new post
           this.addPost(new Post(data.contents))
+        } else { // history dump
+          this.merge(data)
         }
       })
       if (this.onNewPeer) this.onNewPeer(peer, id)
@@ -50,23 +52,43 @@ module.exports = class Thread {
   }
 
   addPost(newPost) {
+    let added = false
     // first post
     if (this.posts.length === 0) {
       this.posts.push(newPost)
+      added = true
     } else {
-      const time = newPost.timestamp
-      let added = false
-      for (let cur = 0; cur < this.posts.length - 1; cur++) {
-        if (this.posts[cur].timestamp < time && time < this.posts[cur + 1].timestamp) {
-          this.posts.splice(cur, 0, newPost)
+      // Check for uniqueness
+      if (this.posts.every(p => !p.equals(newPost))) {
+        const time = newPost.timestamp
+        
+        for (let cur = 0; cur < this.posts.length - 1; cur++) {
+          if (this.posts[cur].timestamp < time && time < this.posts[cur + 1].timestamp) {
+            this.posts.splice(cur, 0, newPost)
+            added = true
+          }
+        }
+        if (!added) {
+          this.posts.push(newPost)
           added = true
         }
       }
-      if (!added) {
-        this.posts.push(newPost)
-      }
     }
-    if (this.onPostsChanged) this.onPostsChanged(newPost)
+    if (added && this.onPostsChanged) this.onPostsChanged(newPost)
+  }
+
+  merge(posts) {
+    if (posts.length === 0) return
+
+    this.posts = this.posts.concat(posts).reduce((a,c) => {
+      if (!(c instanceof Post)) c = new Post(c)
+      if (a.every(p => !p.equals(c))) {
+        a.push(c)
+      }
+      return a
+    }, []).sort((a,b) => a.timestamp - b.timestamp)
+
+    if (this.onPostsChanged) this.onPostsChanged(posts)
   }
 
   asElement() {
