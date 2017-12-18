@@ -1,0 +1,21 @@
+{
+  "name": "distributed_imageboard",
+  "version": "0.1.0",
+  "description": "Realtime distributed imageboard",
+  "main": "index.js",
+  "dependencies": {
+    "diff-dom": "^2.3.0",
+    "signalhub": "^4.9.0",
+    "sodium-signatures": "^2.1.0",
+    "webrtc-swarm": "^2.9.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "3mollot@gmail.com",
+  "license": "GPL-3.0",
+  "@std/esm": {
+    "esm": "js"
+  }
+}
